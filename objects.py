@@ -1,201 +1,160 @@
+from abc import ABC, abstractmethod
+import pygame
 from settings import *
 import random
 import math
-import pygame.mouse
+import logging
 
-class GameSprite(pygame.sprite.Sprite):
-    def __init__(self, image, x, y, w, h, speed):
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+class Drawable(ABC):
+    @abstractmethod
+    def draw(self, win):
+        pass
+
+class Movable(ABC):
+    @abstractmethod
+    def move(self, *args):
+        pass
+
+class GameSprite(pygame.sprite.Sprite, Drawable):
+    def __init__(self, image, x, y, w, h):
         super().__init__()
-        self.w = w
-        self.h = h
-        self.speed = speed
-        
-        self.image = pygame.transform.scale(
-                        pygame.image.load(image),
-                        (w, h)
-                    )
-        
-        self.start_image = self.image
+        self.image = pygame.transform.scale(pygame.image.load(image), (w, h))
+        self.rect = self.image.get_rect(center=(x, y))
 
-        self.rect = self.image.get_rect()
-        self.rect.center = (x, y)
-
-        self.hitbox = pygame.Rect(self.rect.x,
-                                  self.rect.y,
-                                  w / 2,
-                                  h / 2)
-        
-    def change_image(self, new_image):
-        self.image = pygame.transform.scale(
-                        pygame.image.load(new_image),
-                        (self.w, self.h)
-                    )
-        
-        self.start_image = self.image
-
-    def rotate(self, angle):
-        self.image = pygame.transform.rotate(self.start_image,
-                                             angle)
-        self.rect = self.image.get_rect(
-            center=(self.rect.centerx, self.rect.centery))
-        
-    def draw(self):
+    def draw(self, win):
         win.blit(self.image, self.rect)
 
-
-class Player(GameSprite):
+class Player(GameSprite, Movable):
     def __init__(self, image, x, y, w, h, speed):
-        super().__init__(image, x, y, w, h, speed)
-        self.reload = 0
-        self.rate = 10
-        self.max_hp = 100
-        self.hp = self.max_hp
+        super().__init__(image, x, y, w, h)
+        self.speed = speed
+        self.hp = 100
+        logging.info("Гравець створений на позиції (%d, %d)", x, y)
+
+    def move(self, keys):
+        old_position = self.rect.topleft
+        if keys[pygame.K_a]: self.rect.x -= self.speed
+        if keys[pygame.K_d]: self.rect.x += self.speed
+        if keys[pygame.K_w]: self.rect.y -= self.speed
+        if keys[pygame.K_s]: self.rect.y += self.speed
+
+        if self.rect.topleft != old_position:
+            logging.info("Гравець перемістився на позицію %s", self.rect.topleft)
+
+    def update(self, input_handler, blocks, collision_handler):
+        self.move(input_handler.get_keys())
+        collision_handler.check_collision(self, blocks)
+
+class Enemy(GameSprite, Movable):
+    def __init__(self, image, x, y, w, h, speed):
+        super().__init__(image, x, y, w, h)
+        self.speed = speed
+        logging.info("Ворог створений на позиції (%d, %d)", x, y)
+
+    def move(self, player):
+        dx = player.rect.centerx - self.rect.centerx
+        dy = player.rect.centery - self.rect.centery
+        angle = math.atan2(dy, dx)
+        self.rect.x += math.cos(angle) * self.speed
+        self.rect.y += math.sin(angle) * self.speed
+
+    def update(self, player):
+        self.move(player)
+
+    def on_collision(self, player):
+        player.hp -= 10
+        logging.info("Гравець втратив 10 HP. Залишилося %d HP", player.hp)
+        self.kill()
+
+class Block(GameSprite):
+    pass
+
+class CollisionHandler:
+    @staticmethod
+    def check_collision(movable, blocks):
+        for block in blocks:
+            if movable.rect.colliderect(block.rect):
+                logging.info("Зіткнення з блоком на позиції %s", block.rect.topleft)
+                CollisionHandler.resolve_collision(movable, block)
+
+    @staticmethod
+    def resolve_collision(movable, block):
+        if movable.rect.right > block.rect.left and movable.rect.left < block.rect.left:
+            movable.rect.right = block.rect.left
+        elif movable.rect.left < block.rect.right and movable.rect.right > block.rect.right:
+            movable.rect.left = block.rect.right
+        elif movable.rect.bottom > block.rect.top and movable.rect.top < block.rect.top:
+            movable.rect.bottom = block.rect.top
+        elif movable.rect.top < block.rect.bottom and movable.rect.bottom > block.rect.bottom:
+            movable.rect.top = block.rect.bottom
+
+class InputHandler:
+    def get_keys(self):
+        return pygame.key.get_pressed()
+
+class GameManager:
+    def __init__(self, win):
+        self.win = win
+        self.game = False
+        self.blocks = pygame.sprite.Group()
+        self.enemies = pygame.sprite.Group()
+        self.player = None
+        self.scores = 0
+        self.collision_handler = CollisionHandler()
+
+    def start_game(self):
+        self.game = True
+        self.scores = 0
+        logging.info("Гра розпочата")
+        self._create_objects()
+
+    def _create_objects(self):
+        self.player = Player(player_image, 350, 250, 50, 50, 5)
+
+        self.blocks.empty()
+        for i in range(3):
+            block = Block(block_image, 100 + i * 200, 300, 100, 50)
+            self.blocks.add(block)
+            logging.info("Блок створений на позиції (%d, %d)", 100 + i * 200, 300)
+
+        self.enemies.empty()
+        for _ in range(5):
+            enemy = Enemy(zombie_images[0], random.randint(50, 750), random.randint(50, 550), 50, 50, 2)
+            self.enemies.add(enemy)
 
     def update(self):
-        self.hitbox.center = self.rect.center
-
-        keys = pygame.key.get_pressed()
-        but = pygame.mouse.get_pressed()
-
-        if keys[pygame.K_a] and self.rect.x > 0:
-            self.rect.centerx -= self.speed
-        if keys[pygame.K_d] and self.rect.x < win_width - self.rect.width:
-            self.rect.centerx += self.speed
-        if keys[pygame.K_w] and self.rect.y > 0:
-            self.rect.centery -= self.speed
-        if keys[pygame.K_s] and self.rect.y < win_height - self.rect.height:
-            self.rect.centery += self.speed
-
-        if but[0] and self.reload >= self.rate:
-            self.reload = 0
-            self.fire()
-
-        self.reload += 1
-        
-
-        pos = pygame.mouse.get_pos() # (112, 256)
-
-        dx = pos[0] - self.rect.centerx
-        dy = self.rect.centery - pos[1]
-        ang = math.degrees(math.atan2(dy, dx))
-
-        self.rotate(ang - 90)
-
-    def fire(self):
-        pos = pygame.mouse.get_pos()
-        dx = pos[0] - self.rect.centerx
-        dy = self.rect.centery - pos[1]
-        ang = -math.atan2(dy, dx)
-
-        b = Bullet(bullet_image,
-                   self.rect.centerx,
-                   self.rect.centery,
-                   8, 18,
-                   70,
-                   ang)
-        bullets.add(b)
-
-
-class Bullet(GameSprite):
-    def __init__(self, image, x, y, w, h, speed, ang):
-        super().__init__(image, x, y, w, h, speed)
-        self.angle = ang
-
-    def update(self):
-        self.hitbox.center = self.rect.center
-        self.rect.x += self.speed * math.cos(self.angle)
-        self.rect.y += self.speed * math.sin(self.angle)
-        self.rotate(math.degrees(-self.angle) - 90)
-        if math.sqrt(self.rect.x**2 + self.rect.y**2) > 1000:
-            self.kill()
-
-
-class Enemy(GameSprite):
-    def __init__(self, image, x, y, w, h, speed):
-        super().__init__(image, x, y, w, h, speed)
-        self.max_hp = 1
-        self.hp = self.max_hp
-        self.damage = 10
-    
-    def spawn(self):
-        self.hp = self.max_hp
-        self.change_image(random.choice(zombie_images))
-
-        place = random.randint(1, 4)
-
-        if place == 1:
-            self.rect.y = -100
-            self.rect.x = random.randint(0, win_width)
-        elif place == 2:
-            self.rect.x = win_width + 100
-            self.rect.y = random.randint(0, win_height)
-        elif place == 3:
-            self.rect.y = win_height + 100
-            self.rect.x = random.randint(0, win_width)
-        elif place == 4:
-            self.rect.x = -100
-            self.rect.y = random.randint(0, win_height)
-
-    def update(self, ang):
-        self.hitbox.center = self.rect.center
-        self.rect.x += self.speed * math.cos(ang)
-        self.rect.y += self.speed * math.sin(ang)
-        self.rotate(math.degrees(-ang) - 90)
-
-
-class Button(pygame.sprite.Sprite):
-    def __init__(self, x, y, w, h, color, label, callback):
-        super().__init__()
-
-        self.callback = callback
-
-        self.color = color
-        r = color[0] + 15 if (color[0] + 15) <= 255 else 255
-        g = color[1] + 15 if (color[1] + 15) <= 255 else 255
-        b = color[2] + 15 if (color[2] + 15) <= 255 else 255
-        self.light_color = (r, g, b)
-
-        self.w = w
-        self.h = h
-
-        self.pressed = False
-
-        self.surface = pygame.Surface((w, h))
-
-        self.rect = self.surface.get_rect()
-        self.rect.centerx = x
-        self.rect.centery = y
-
-        self.text = label
-        self.label_rect = self.text.get_rect()
-        self.label_rect.centerx = w/2
-        self.label_rect.centery = h/2
-
-        self.surface.fill(self.color)
-        self.surface.blit(label, self.label_rect)
-
-
-    def is_on(self):
-        x, y = pygame.mouse.get_pos()
-        on = self.rect.collidepoint(x, y)
-        if on:
-            self.surface.fill(self.light_color)
+        if self.game:
+            self._run_game()
         else:
-            self.surface.fill(self.color)
-        return on
-    
-    def is_press(self):
-        bt = pygame.mouse.get_pressed()
-        if self.is_on() and bt[0] and not self.pressed:
-            self.pressed = True
-            self.callback()
+            self._display_start_message()
 
-        if not bt[0]:
-            self.pressed = False
+    def _run_game(self):
+        self.win.blit(background_image, (0, 0))
 
-    def update(self):
-        self.is_press()
-        self.surface.blit(self.text, self.label_rect)
+        for block in self.blocks:
+            block.draw(self.win)
 
-    def draw(self):
-        win.blit(self.surface, (self.rect.x, self.rect.y))
+        self.player.update(InputHandler(), self.blocks, self.collision_handler)
+        self.player.draw(self.win)
+
+        for enemy in self.enemies:
+            enemy.update(self.player)
+            enemy.draw(self.win)
+            if enemy.rect.colliderect(self.player.rect):
+                logging.info("Зіткнення гравця з ворогом")
+                enemy.on_collision(self.player)
+
+        if self.player.hp <= 0:
+            logging.info("Гравець загинув. Кінець гри.")
+            self.game = False
+
+    def _display_start_message(self):
+        self.win.fill((0, 0, 0))
+        font = pygame.font.SysFont(None, 50)
+        text = font.render("Press SPACE to Start", True, (255, 255, 255))
+        self.win.blit(text, (win_width // 2 - text.get_width() // 2, win_height // 2))
+
+    def is_running(self):
+        return self.game
