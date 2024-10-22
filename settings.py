@@ -10,6 +10,7 @@ win = pygame.display.set_mode((win_width, win_height + 50))
 clock = pygame.time.Clock()
 
 player_image = "textures/player.png"
+block_image = "textures/block.png"
 bullet_image = "textures/bullet.png"
 zombie_images = ["textures/zombie1.png",
                  "textures/zombie2.png",
