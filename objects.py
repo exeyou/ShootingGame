@@ -47,27 +47,6 @@ class Player(GameSprite, Movable):
         self.move(input_handler.get_keys())
         collision_handler.check_collision(self, blocks)
 
-class Enemy(GameSprite, Movable):
-    def __init__(self, image, x, y, w, h, speed):
-        super().__init__(image, x, y, w, h)
-        self.speed = speed
-        logging.info("Ворог створений на позиції (%d, %d)", x, y)
-
-    def move(self, player):
-        dx = player.rect.centerx - self.rect.centerx
-        dy = player.rect.centery - self.rect.centery
-        angle = math.atan2(dy, dx)
-        self.rect.x += math.cos(angle) * self.speed
-        self.rect.y += math.sin(angle) * self.speed
-
-    def update(self, player):
-        self.move(player)
-
-    def on_collision(self, player):
-        player.hp -= 10
-        logging.info("Гравець втратив 10 HP. Залишилося %d HP", player.hp)
-        self.kill()
-
 class Block(GameSprite):
     pass
 
@@ -93,13 +72,103 @@ class CollisionHandler:
 class InputHandler:
     def get_keys(self):
         return pygame.key.get_pressed()
+class EnemyBase(GameSprite, Movable, ABC):
+    """Базовий клас для всіх ворогів."""
+    def __init__(self, image, x, y, w, h, speed, hp):
+        super().__init__(image, x, y, w, h)
+        self.speed = speed
+        self.hp = hp
 
+    @abstractmethod
+    def attack(self, player):
+        """Метод атаки, який реалізують підкласи."""
+        pass
+
+    def move(self, player):
+        """Рух ворога у напрямку гравця."""
+        dx = player.rect.centerx - self.rect.centerx
+        dy = player.rect.centery - self.rect.centery
+        angle = math.atan2(dy, dx)
+        self.rect.x += math.cos(angle) * self.speed
+        self.rect.y += math.sin(angle) * self.speed
+
+    def update(self, player):
+        self.move(player)
+        self.attack(player)
+
+class Zombie(EnemyBase):
+    """Тип ворога: Зомбі."""
+    def __init__(self, x, y):
+        super().__init__(zombie_images[0], x, y, 50, 50, speed=2, hp=30)
+
+    def attack(self, player):
+        """Атака ближнього бою: завдає шкоду при зіткненні."""
+        if self.rect.colliderect(player.rect):
+            player.hp -= 10
+            logging.info("Зомбі атакував гравця. Здоров'я: %d", player.hp)
+            self.kill()
+
+class Shooter(EnemyBase):
+    """Тип ворога: Стрілець."""
+    def __init__(self, x, y):
+        super().__init__(zombie_images[1], x, y, 50, 50, speed=1, hp=20)
+        self.shot_cooldown = 60 
+        self.cooldown_timer = 0
+
+    def attack(self, player):
+        """Стрілець атакує з відстані."""
+        if self.cooldown_timer <= 0:
+            bullet = Bullet(self.rect.centerx, self.rect.centery, player.rect.centerx, player.rect.centery)
+            GameManager.instance.add_enemy_bullet(bullet)
+            self.cooldown_timer = self.shot_cooldown
+            logging.info("Стрілець випустив кулю")
+        else:
+            self.cooldown_timer -= 1
+
+
+class Bullet(GameSprite):
+    """Куля, випущена ворогом."""
+    def __init__(self, x, y, target_x, target_y):
+        super().__init__(bullet_image, x, y, 10, 10)
+        self.speed = 5
+        dx = target_x - x
+        dy = target_y - y
+        angle = math.atan2(dy, dx)
+        self.velocity_x = math.cos(angle) * self.speed
+        self.velocity_y = math.sin(angle) * self.speed
+
+    def move(self):
+        """Куля рухається в напрямку, визначеному під час пострілу."""
+        self.rect.x += self.velocity_x
+        self.rect.y += self.velocity_y
+
+    def update(self, player):
+        self.move()
+        if self.rect.colliderect(player.rect):
+            player.hp -= 5
+            logging.info("Куля влучила у гравця. Здоров'я: %d", player.hp)
+            self.kill()
+
+
+class EnemyFactory:
+    """Фабрика для створення ворогів."""
+    @staticmethod
+    def create_enemy(enemy_type, x, y):
+        if enemy_type == "zombie":
+            return Zombie(x, y)
+        elif enemy_type == "shooter":
+            return Shooter(x, y)
+        else:
+            raise ValueError(f"Невідомий тип ворога: {enemy_type}")
 class GameManager:
+    instance = None 
     def __init__(self, win):
+        self.__class__.instance = self
         self.win = win
         self.game = False
         self.blocks = pygame.sprite.Group()
         self.enemies = pygame.sprite.Group()
+        self.enemy_bullets = pygame.sprite.Group()
         self.player = None
         self.scores = 0
         self.collision_handler = CollisionHandler()
@@ -117,11 +186,11 @@ class GameManager:
         for i in range(3):
             block = Block(block_image, 100 + i * 200, 300, 100, 50)
             self.blocks.add(block)
-            logging.info("Блок створений на позиції (%d, %d)", 100 + i * 200, 300)
 
         self.enemies.empty()
         for _ in range(5):
-            enemy = Enemy(zombie_images[0], random.randint(50, 750), random.randint(50, 550), 50, 50, 2)
+            enemy_type = random.choice(["zombie", "shooter"])
+            enemy = EnemyFactory.create_enemy(enemy_type, random.randint(50, 750), random.randint(50, 550))
             self.enemies.add(enemy)
 
     def update(self):
@@ -131,6 +200,8 @@ class GameManager:
             self._display_start_message()
 
     def _run_game(self):
+        self.win.blit(background_image, (0, 0))
+        self._spawn_enemies()
         self.win.blit(background_image, (0, 0))
 
         for block in self.blocks:
@@ -142,19 +213,29 @@ class GameManager:
         for enemy in self.enemies:
             enemy.update(self.player)
             enemy.draw(self.win)
-            if enemy.rect.colliderect(self.player.rect):
-                logging.info("Зіткнення гравця з ворогом")
-                enemy.on_collision(self.player)
+
+        for bullet in self.enemy_bullets:
+            bullet.update(self.player)
+            bullet.draw(self.win)
 
         if self.player.hp <= 0:
             logging.info("Гравець загинув. Кінець гри.")
             self.game = False
-
     def _display_start_message(self):
         self.win.fill((0, 0, 0))
         font = pygame.font.SysFont(None, 50)
         text = font.render("Press SPACE to Start", True, (255, 255, 255))
         self.win.blit(text, (win_width // 2 - text.get_width() // 2, win_height // 2))
+    def _spawn_enemies(self):
+        """Спавнить нових ворогів випадково."""
+        if len(self.enemies) < 5 and random.random() < 0.01:
+            enemy_type = random.choice(["zombie", "shooter"])
+            enemy = EnemyFactory.create_enemy(enemy_type, random.randint(50, 750), random.randint(50, 550))
+            self.enemies.add(enemy)
+    def add_enemy_bullet(self, bullet):
+        """Додає кулю до групи куль."""
+        self.enemy_bullets.add(bullet)
 
     def is_running(self):
         return self.game
+
