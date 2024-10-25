@@ -84,13 +84,10 @@ class EnemyBase(GameSprite, Movable, ABC):
         """Метод атаки, який реалізують підкласи."""
         pass
 
+    @abstractmethod
     def move(self, player):
-        """Рух ворога у напрямку гравця."""
-        dx = player.rect.centerx - self.rect.centerx
-        dy = player.rect.centery - self.rect.centery
-        angle = math.atan2(dy, dx)
-        self.rect.x += math.cos(angle) * self.speed
-        self.rect.y += math.sin(angle) * self.speed
+        """Унікальний рух для кожного ворога."""
+        pass
 
     def update(self, player):
         self.move(player)
@@ -100,6 +97,14 @@ class Zombie(EnemyBase):
     """Тип ворога: Зомбі."""
     def __init__(self, x, y):
         super().__init__(zombie_images[0], x, y, 50, 50, speed=2, hp=30)
+
+    def move(self, player):
+        """Рух зомбі: слідує за гравцем лінійно."""
+        dx = player.rect.centerx - self.rect.centerx
+        dy = player.rect.centery - self.rect.centery
+        angle = math.atan2(dy, dx)
+        self.rect.x += math.cos(angle) * self.speed
+        self.rect.y += math.sin(angle) * self.speed
 
     def attack(self, player):
         """Атака ближнього бою: завдає шкоду при зіткненні."""
@@ -112,8 +117,21 @@ class Shooter(EnemyBase):
     """Тип ворога: Стрілець."""
     def __init__(self, x, y):
         super().__init__(zombie_images[1], x, y, 50, 50, speed=1, hp=20)
-        self.shot_cooldown = 60 
+        self.shot_cooldown = 60
         self.cooldown_timer = 0
+
+    def move(self, player):
+        """Стрілець намагається підтримувати дистанцію від гравця."""
+        distance = math.hypot(player.rect.centerx - self.rect.centerx, player.rect.centery - self.rect.centery)
+        if distance < 150:
+            dx = self.rect.centerx - player.rect.centerx
+            dy = self.rect.centery - player.rect.centery
+        else:
+            dx = player.rect.centerx - self.rect.centerx
+            dy = player.rect.centery - self.rect.centery
+        angle = math.atan2(dy, dx)
+        self.rect.x += math.cos(angle) * self.speed
+        self.rect.y += math.sin(angle) * self.speed
 
     def attack(self, player):
         """Стрілець атакує з відстані."""
@@ -124,6 +142,7 @@ class Shooter(EnemyBase):
             logging.info("Стрілець випустив кулю")
         else:
             self.cooldown_timer -= 1
+
 
 
 class Bullet(GameSprite):
@@ -238,4 +257,3 @@ class GameManager:
 
     def is_running(self):
         return self.game
-
