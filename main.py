@@ -1,4 +1,4 @@
-from objects import Player, Block, Enemy, InputHandler, GameManager
+from objects import InputHandler, GameManager, Button
 from settings import *
 import pygame
 import random
@@ -11,12 +11,7 @@ game_manager = GameManager(win)
 
 while True:
     for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            exit()
-
-        if not game_manager.is_running() and event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            game_manager.start_game()
+        game_manager.handle_events(event)
 
     game_manager.update()
     pygame.display.update()
