@@ -25,27 +25,48 @@ class GameSprite(pygame.sprite.Sprite, Drawable):
 
     def draw(self, win):
         win.blit(self.image, self.rect)
+    
+    def rotate(self, angle):
+        self.image = pygame.transform.rotate(self.image, angle)
+        self.rect = self.image.get_rect(center=self.rect.center)
 
 class Player(GameSprite, Movable):
     def __init__(self, image, x, y, w, h, speed):
         super().__init__(image, x, y, w, h)
         self.speed = speed
         self.hp = 100
+        self.last_angle = 0  # To track the last angle of rotation
         logging.info("Гравець створений на позиції (%d, %d)", x, y)
 
     def move(self, keys):
         old_position = self.rect.topleft
-        if keys[pygame.K_a]: self.rect.x -= self.speed
-        if keys[pygame.K_d]: self.rect.x += self.speed
-        if keys[pygame.K_w]: self.rect.y -= self.speed
-        if keys[pygame.K_s]: self.rect.y += self.speed
-
+        new_angle = self.last_angle  # Default to the last angle
+        
+        if keys[pygame.K_a]:  # Move left
+            self.rect.x -= self.speed
+            new_angle = 180  # Pointing left
+        elif keys[pygame.K_d]:  # Move right
+            self.rect.x += self.speed
+            new_angle = 0  # Pointing right
+        elif keys[pygame.K_w]:  # Move up
+            self.rect.y -= self.speed
+            new_angle = 90  # Pointing up
+        elif keys[pygame.K_s]:  # Move down
+            self.rect.y += self.speed
+            new_angle = 270  # Pointing down
+        
+        # Rotate only if the angle has changed
+        if new_angle != self.last_angle:
+            self.rotate(new_angle - self.last_angle)  # Rotate to the new angle
+            self.last_angle = new_angle  # Update last angle
+        
         if self.rect.topleft != old_position:
             logging.info("Гравець перемістився на позицію %s", self.rect.topleft)
 
     def update(self, input_handler, blocks, collision_handler):
         self.move(input_handler.get_keys())
         collision_handler.check_collision(self, blocks)
+
 
 class Block(GameSprite):
     pass
@@ -168,6 +189,35 @@ class Bullet(GameSprite):
             logging.info("Куля влучила у гравця. Здоров'я: %d", player.hp)
             self.kill()
 
+class Button:
+    def __init__(self, x, y, width, height, text='', color=(0, 128, 255), hover_color=(75, 200, 255), text_color=(255, 255, 255), font_size=30):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.color = color
+        self.hover_color = hover_color
+        self.text_color = text_color
+        self.text = text
+        self.font = pygame.font.Font(None, font_size)
+        self.clicked = False
+
+    def draw(self, screen):
+        # Change color on hover
+        if self.rect.collidepoint(pygame.mouse.get_pos()):
+            pygame.draw.rect(screen, self.hover_color, self.rect)
+        else:
+            pygame.draw.rect(screen, self.color, self.rect)
+
+        # Draw text
+        if self.text:
+            text_surface = self.font.render(self.text, True, self.text_color)
+            text_rect = text_surface.get_rect(center=self.rect.center)
+            screen.blit(text_surface, text_rect)
+
+    def is_clicked(self, event):
+        # Check for click event within the button
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left mouse button
+            if self.rect.collidepoint(event.pos):
+                return True
+        return False
 
 class EnemyFactory:
     """Фабрика для створення ворогів."""
@@ -180,11 +230,12 @@ class EnemyFactory:
         else:
             raise ValueError(f"Невідомий тип ворога: {enemy_type}")
 class GameManager:
-    instance = None 
+    instance = None
+    
     def __init__(self, win):
         self.__class__.instance = self
         self.win = win
-        self.game = False
+        self.game_running = False
         self.blocks = pygame.sprite.Group()
         self.enemies = pygame.sprite.Group()
         self.enemy_bullets = pygame.sprite.Group()
@@ -192,20 +243,27 @@ class GameManager:
         self.scores = 0
         self.collision_handler = CollisionHandler()
 
+        # Create the button once in the constructor
+        self.start_button = Button(200, 150, 200, 80, text='Start Game')
+
     def start_game(self):
-        self.game = True
+        """Start the game and initialize objects."""
+        self.game_running = True
         self.scores = 0
         logging.info("Гра розпочата")
         self._create_objects()
 
     def _create_objects(self):
+        """Create player, blocks, and enemies."""
         self.player = Player(player_image, 350, 250, 50, 50, 5)
 
+        # Create and add blocks
         self.blocks.empty()
         for i in range(3):
             block = Block(block_image, 100 + i * 200, 300, 100, 50)
             self.blocks.add(block)
 
+        # Create and add enemies
         self.enemies.empty()
         for _ in range(5):
             enemy_type = random.choice(["zombie", "shooter"])
@@ -213,19 +271,18 @@ class GameManager:
             self.enemies.add(enemy)
 
     def update(self):
-        if self.game:
+        """Update game state and draw the current frame."""
+        if self.game_running:
             self._run_game()
         else:
             self._display_start_message()
 
     def _run_game(self):
-        self.win.blit(background_image, (0, 0))
-        self._spawn_enemies()
+        """Main game loop logic."""
         self.win.blit(background_image, (0, 0))
 
-        for block in self.blocks:
-            block.draw(self.win)
-
+        # Draw and update blocks, player, enemies, and bullets
+        self.blocks.draw(self.win)
         self.player.update(InputHandler(), self.blocks, self.collision_handler)
         self.player.draw(self.win)
 
@@ -237,23 +294,29 @@ class GameManager:
             bullet.update(self.player)
             bullet.draw(self.win)
 
+        # Check if the player is dead
         if self.player.hp <= 0:
             logging.info("Гравець загинув. Кінець гри.")
-            self.game = False
+            self.game_running = False
     def _display_start_message(self):
-        self.win.fill((0, 0, 0))
-        font = pygame.font.SysFont(None, 50)
-        text = font.render("Press SPACE to Start", True, (255, 255, 255))
-        self.win.blit(text, (win_width // 2 - text.get_width() // 2, win_height // 2))
-    def _spawn_enemies(self):
-        """Спавнить нових ворогів випадково."""
-        if len(self.enemies) < 5 and random.random() < 0.01:
-            enemy_type = random.choice(["zombie", "shooter"])
-            enemy = EnemyFactory.create_enemy(enemy_type, random.randint(50, 750), random.randint(50, 550))
-            self.enemies.add(enemy)
+        """Display the start message and button."""
+        self.win.fill((0, 0, 0))  # Clear screen with black
+        self.win.blit(background_image, (0, 0))
+        self.start_button.draw(self.win)  # Draw button
+
+    def handle_events(self, event):
+        """Handle events like button clicks."""
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            exit()
+        elif self.start_button.is_clicked(event) and self.game_running != True:
+            self.start_game()  # Start game when button is clicked
+
     def add_enemy_bullet(self, bullet):
-        """Додає кулю до групи куль."""
+        """Add a bullet to the enemy bullets group."""
         self.enemy_bullets.add(bullet)
 
     def is_running(self):
-        return self.game
+        """Check if the game is running."""
+        return self.game_running
+
