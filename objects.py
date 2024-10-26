@@ -35,30 +35,29 @@ class Player(GameSprite, Movable):
         super().__init__(image, x, y, w, h)
         self.speed = speed
         self.hp = 100
-        self.last_angle = 0  # To track the last angle of rotation
+        self.last_angle = 0
         logging.info("Гравець створений на позиції (%d, %d)", x, y)
 
     def move(self, keys):
         old_position = self.rect.topleft
-        new_angle = self.last_angle  # Default to the last angle
+        new_angle = self.last_angle
         
-        if keys[pygame.K_a]:  # Move left
+        if keys[pygame.K_a]:
             self.rect.x -= self.speed
-            new_angle = 180  # Pointing left
-        elif keys[pygame.K_d]:  # Move right
+            new_angle = 180
+        elif keys[pygame.K_d]:
             self.rect.x += self.speed
-            new_angle = 0  # Pointing right
-        elif keys[pygame.K_w]:  # Move up
+            new_angle = 0 
+        elif keys[pygame.K_w]:
             self.rect.y -= self.speed
-            new_angle = 90  # Pointing up
-        elif keys[pygame.K_s]:  # Move down
+            new_angle = 90
+        elif keys[pygame.K_s]:
             self.rect.y += self.speed
-            new_angle = 270  # Pointing down
+            new_angle = 270
         
-        # Rotate only if the angle has changed
         if new_angle != self.last_angle:
-            self.rotate(new_angle - self.last_angle)  # Rotate to the new angle
-            self.last_angle = new_angle  # Update last angle
+            self.rotate(new_angle - self.last_angle)
+            self.last_angle = new_angle
         
         if self.rect.topleft != old_position:
             logging.info("Гравець перемістився на позицію %s", self.rect.topleft)
@@ -200,21 +199,18 @@ class Button:
         self.clicked = False
 
     def draw(self, screen):
-        # Change color on hover
         if self.rect.collidepoint(pygame.mouse.get_pos()):
             pygame.draw.rect(screen, self.hover_color, self.rect)
         else:
             pygame.draw.rect(screen, self.color, self.rect)
 
-        # Draw text
         if self.text:
             text_surface = self.font.render(self.text, True, self.text_color)
             text_rect = text_surface.get_rect(center=self.rect.center)
             screen.blit(text_surface, text_rect)
 
     def is_clicked(self, event):
-        # Check for click event within the button
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left mouse button
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1: 
             if self.rect.collidepoint(event.pos):
                 return True
         return False
@@ -243,7 +239,6 @@ class GameManager:
         self.scores = 0
         self.collision_handler = CollisionHandler()
 
-        # Create the button once in the constructor
         self.start_button = Button(200, 150, 200, 80, text='Start Game')
 
     def start_game(self):
@@ -257,13 +252,11 @@ class GameManager:
         """Create player, blocks, and enemies."""
         self.player = Player(player_image, 350, 250, 50, 50, 5)
 
-        # Create and add blocks
         self.blocks.empty()
         for i in range(3):
             block = Block(block_image, 100 + i * 200, 300, 100, 50)
             self.blocks.add(block)
 
-        # Create and add enemies
         self.enemies.empty()
         for _ in range(5):
             enemy_type = random.choice(["zombie", "shooter"])
@@ -281,7 +274,6 @@ class GameManager:
         """Main game loop logic."""
         self.win.blit(background_image, (0, 0))
 
-        # Draw and update blocks, player, enemies, and bullets
         self.blocks.draw(self.win)
         self.player.update(InputHandler(), self.blocks, self.collision_handler)
         self.player.draw(self.win)
@@ -294,15 +286,14 @@ class GameManager:
             bullet.update(self.player)
             bullet.draw(self.win)
 
-        # Check if the player is dead
         if self.player.hp <= 0:
             logging.info("Гравець загинув. Кінець гри.")
             self.game_running = False
     def _display_start_message(self):
         """Display the start message and button."""
-        self.win.fill((0, 0, 0))  # Clear screen with black
+        self.win.fill((0, 0, 0)) 
         self.win.blit(background_image, (0, 0))
-        self.start_button.draw(self.win)  # Draw button
+        self.start_button.draw(self.win)
 
     def handle_events(self, event):
         """Handle events like button clicks."""
@@ -310,7 +301,7 @@ class GameManager:
             pygame.quit()
             exit()
         elif self.start_button.is_clicked(event) and self.game_running != True:
-            self.start_game()  # Start game when button is clicked
+            self.start_game() 
 
     def add_enemy_bullet(self, bullet):
         """Add a bullet to the enemy bullets group."""
