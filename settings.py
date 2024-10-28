@@ -11,10 +11,10 @@ clock = pygame.time.Clock()
 
 player_image = "textures/player.png"
 block_image = "textures/block.png"
-bullet_image = "textures/bullet.png"
-zombie_images = ["textures/zombie1.png",
-                 "textures/zombie2.png",
-                 "textures/zombie3.png"]
+enemybullet_image = "textures/bullet.png"
+playerbullet_image = "textures/allybullet.png"
+zombie_image = "textures/zombie1.png"
+shooter_image = "textures/zombie2.png"
 
 background_image = pygame.transform.scale(
                     pygame.image.load('textures/background.png'),
@@ -30,8 +30,6 @@ main_background_image = pygame.transform.scale(
 bullets = pygame.sprite.Group()
 enemys = pygame.sprite.Group()
 
-damage_sound = pygame.mixer.Sound("sounds/damage.ogg")
-coin_sound = pygame.mixer.Sound("sounds/coin.ogg")
 
 background = (150, 150, 100)
 UI = pygame.Rect(0, win_height, win_width, 50)
