@@ -115,7 +115,7 @@ class GameManager:
         self.player.draw(self.win)
 
         for enemy in self.enemies:
-            enemy.update(self.player, self.blocks)
+            enemy.update(self.player, self.blocks, self.enemies)
             enemy.draw(self.win)
 
         for bullet in self.enemy_bullets:
