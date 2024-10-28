@@ -157,7 +157,7 @@ class GameManager:
             sound.play()
             self.lost_sound_played = True
 
-        self._draw_centered_text("Loose", 30, (255, 0, 0), self.win_height // 2 - 100)
+        self._draw_centered_text("Ви програли!", 30, (255, 0, 0), self.win_height // 2 - 100)
         self.restart_button.draw(self.win)
         pygame.display.flip()
 
@@ -172,7 +172,7 @@ class GameManager:
             sound.play()
             self.win_sound_played = True
 
-        self._draw_centered_text("Win", 30, (0, 255, 0), self.win_height // 2 - 100)
+        self._draw_centered_text("Ви перемогли!", 30, (0, 255, 0), self.win_height // 2 - 100)
         self.restart_button.draw(self.win)
         pygame.display.flip()
 
