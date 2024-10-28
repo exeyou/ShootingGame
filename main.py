@@ -1,18 +1,18 @@
-from objects import InputHandler, GameManager, Button
-from settings import *
 import pygame
-import random
-
-pygame.init()
-win = pygame.display.set_mode((win_width, win_height))
+from game_manager import GameManager
+from settings import win_width, win_height, background_image, FPS
 clock = pygame.time.Clock()
+def main():
+    pygame.init()
+    win = pygame.display.set_mode((win_width, win_height))
+    game_manager = GameManager(win)
 
-game_manager = GameManager(win)
+    while True:
+        for event in pygame.event.get():
+            game_manager.handle_events(event)
+        game_manager.update()
+        pygame.display.flip()
+        clock.tick(FPS)
 
-while True:
-    for event in pygame.event.get():
-        game_manager.handle_events(event)
-
-    game_manager.update()
-    pygame.display.update()
-    clock.tick(FPS)
+if __name__ == "__main__":
+    main()
