@@ -38,15 +38,14 @@ class EnemyBase(GameSprite, Movable, ABC):
     def move(self, player, blocks):
         pass
 
-    def update(self, player, blocks):
+    def update(self, player, blocks, enemies):
         if self.hp > 0:
-            self.move(player, blocks)
+            self.move(player, blocks, enemies)
             self.attack(player)
         else:
             self.play_death_animation()
 
     def play_death_animation(self):
-        """Play the death animation at the enemy's position."""
         sound = mixer.Sound('sounds/enemydeath.ogg')
         sound.set_volume(0.1)
         sound.play()
@@ -69,7 +68,7 @@ class Zombie(EnemyBase):
     def __init__(self, x, y):
         super().__init__(zombie_image, x, y, 50, 50, speed=2, hp=30, dead=False)
 
-    def move(self, player, blocks):
+    def move(self, player, blocks, other_enemies):
         dx = player.rect.centerx - self.rect.centerx
         dy = player.rect.centery - self.rect.centery
         angle = math.atan2(dy, dx)
@@ -94,6 +93,21 @@ class Zombie(EnemyBase):
 
                 if new_rect.colliderect(block.rect):
                     return
+        for other in other_enemies:
+            if other is not self:
+                distance_to_other = math.hypot(
+                    other.rect.centerx - self.rect.centerx,
+                    other.rect.centery - self.rect.centery
+                )
+                if distance_to_other < 70:
+                    peer_dx = self.rect.centerx - other.rect.centerx
+                    peer_dy = self.rect.centery - other.rect.centery
+                    peer_avoid_angle = math.atan2(peer_dy, peer_dx)
+
+                    new_x += math.cos(peer_avoid_angle) * self.speed
+                    new_y += math.sin(peer_avoid_angle) * self.speed
+                    new_rect = self.rect.move(new_x - self.rect.x, new_y - self.rect.y)
+
 
 
         self.rect.x = new_x
@@ -113,13 +127,18 @@ class Shooter(EnemyBase):
         super().__init__(shooter_image, x, y, 50, 50, speed=1, hp=20, dead=False)
         self.shot_cooldown = 60
         self.cooldown_timer = 0
+        self.avoidance_distance = 50
+        self.peer_distance = 70
 
-    def move(self, player, blocks):
-        distance = math.hypot(
-            player.rect.centerx - self.rect.centerx, 
+    def move(self, player, blocks, other_enemies):
+
+        distance_to_player = math.hypot(
+            player.rect.centerx - self.rect.centerx,
             player.rect.centery - self.rect.centery
         )
-        if distance < 150:
+
+
+        if distance_to_player < 200:
             dx = self.rect.centerx - player.rect.centerx
             dy = self.rect.centery - player.rect.centery
         else:
@@ -132,20 +151,37 @@ class Shooter(EnemyBase):
         new_y = self.rect.y + math.sin(angle) * self.speed
         new_rect = self.rect.move(new_x - self.rect.x, new_y - self.rect.y)
 
+
         for block in blocks:
-            if new_rect.colliderect(block.rect):
+            if self.rect.colliderect(block.rect.inflate(self.avoidance_distance, self.avoidance_distance)):
 
-                if random.choice([True, False]):
-                    angle += math.pi / 2 
-                else:
-                    angle -= math.pi / 2
+                block_dx = self.rect.centerx - block.rect.centerx
+                block_dy = self.rect.centery - block.rect.centery
+                avoid_angle = math.atan2(block_dy, block_dx)
 
-                new_x = self.rect.x + math.cos(angle) * self.speed
-                new_y = self.rect.y + math.sin(angle) * self.speed
+                new_x += math.cos(avoid_angle) * self.speed
+                new_y += math.sin(avoid_angle) * self.speed
                 new_rect = self.rect.move(new_x - self.rect.x, new_y - self.rect.y)
 
                 if new_rect.colliderect(block.rect):
                     return
+
+
+        for other in other_enemies:
+            if other is not self:
+                distance_to_other = math.hypot(
+                    other.rect.centerx - self.rect.centerx,
+                    other.rect.centery - self.rect.centery
+                )
+                if distance_to_other < 70:
+
+                    peer_dx = self.rect.centerx - other.rect.centerx
+                    peer_dy = self.rect.centery - other.rect.centery
+                    peer_avoid_angle = math.atan2(peer_dy, peer_dx)
+
+                    new_x += math.cos(peer_avoid_angle) * self.speed
+                    new_y += math.sin(peer_avoid_angle) * self.speed
+                    new_rect = self.rect.move(new_x - self.rect.x, new_y - self.rect.y)
 
 
         self.rect.x = new_x
@@ -155,8 +191,8 @@ class Shooter(EnemyBase):
         from game_manager import GameManager
         if self.cooldown_timer <= 0:
             bullet = Bullet(
-                self.rect.centerx, self.rect.centery, 
-                player.rect.centerx, player.rect.centery, 
+                self.rect.centerx, self.rect.centery,
+                player.rect.centerx, player.rect.centery,
                 enemybullet_image
             )
             GameManager.instance.add_enemy_bullet(bullet)
